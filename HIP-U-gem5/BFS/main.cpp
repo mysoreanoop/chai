@@ -171,36 +171,25 @@ void read_input(int &source, Node *&h_nodes, Edge *&h_edges, const Params &p) {
 // Main ------------------------------------------------------------------------------------------
 int main(int argc, char **argv) {
 
-    fprintf(stderr,"AM: Starting0" );
     const Params p(argc, argv);
-    fprintf(stderr,"AM: Starting1" );
     //hipError_t  cudaStatus;
-    fprintf(stderr,"AM: Starting2" );
     // Allocate
     int n_nodes, n_edges;
-    fprintf(stderr,"AM: Starting3" );
     read_input_size(n_nodes, n_edges, p);
-    fprintf(stderr,"AM: Starting4" );
     Node * nodes = (Node *)malloc(sizeof(Node) * n_nodes);
     Edge * edges = (Edge *)malloc(sizeof(Edge) * n_edges);
     std::atomic_int * color = (std::atomic_int *)malloc(sizeof(std::atomic_int) * n_nodes);
     std::atomic_int * cost = (std::atomic_int *)malloc(sizeof(std::atomic_int) * n_nodes);
-    fprintf(stderr,"AM: Starting5" );
     int * q1 = (int *)malloc(sizeof(int) * n_nodes);
     int * q2 = (int *)malloc(sizeof(int) * n_nodes);
-    fprintf(stderr,"AM: Starting6" );
     std::atomic_int * head = (std::atomic_int *)malloc(sizeof(std::atomic_int));
     std::atomic_int * tail = (std::atomic_int *)malloc(sizeof(std::atomic_int));
     std::atomic_int * threads_end = (std::atomic_int *)malloc(sizeof(std::atomic_int));
     std::atomic_int * threads_run = (std::atomic_int *)malloc(sizeof(std::atomic_int));
-    fprintf(stderr,"AM: Starting7" );
     int * num_t = (int *)malloc(sizeof(int));
     int * overflow = (int *)malloc(sizeof(int));
-    fprintf(stderr,"AM: Starting8" );
     ALLOC_ERR(nodes, edges, color, cost, q1, q2);
-    fprintf(stderr,"AM: Starting9" );
     ALLOC_ERR(head, tail, threads_end, threads_run, num_t, overflow);
-    fprintf(stderr,"AM: Allocated" );
     hipDeviceSynchronize();
     fprintf(stderr,"AM: Synced" );
     // Initialize
@@ -220,7 +209,6 @@ int main(int argc, char **argv) {
     q1[0]       = source;
     overflow[0] = 0;
 
-    fprintf(stderr,"AM: Inited" );
     hipDeviceSynchronize();
     fprintf(stderr,"AM: Synced" );
 
@@ -234,7 +222,6 @@ int main(int argc, char **argv) {
         for(int i = 0; i < n_nodes; i++) {
             color[i].store(WHITE);
         }
-    fprintf(stderr,"AM: Reset" );
         // Initialize
         tail[0].store(0);
         head[0].store(0);
@@ -243,7 +230,6 @@ int main(int argc, char **argv) {
         q1[0]       = source;
         overflow[0] = 0;
 
-    fprintf(stderr,"AM: Inited inside loop" );
         //m5_work_begin(0, 0);
 
         // Run first iteration in master CPU thread
@@ -267,7 +253,7 @@ int main(int argc, char **argv) {
         const int CPU_EXEC = (p.n_threads > 0) ? 1 : 0;
         const int GPU_EXEC = (p.n_gpu_blocks > 0 && p.n_gpu_threads > 0) ? 1 : 0;
 
-    fprintf(stderr,"AM: Launching GPU" );
+        fprintf(stderr,"AM: Launching GPU" );
         // Kernel launch
         if(GPU_EXEC == 1) {
             hipError_t cudaStatus = call_BFS_gpu(p.n_gpu_blocks, p.n_gpu_threads, nodes, edges, (int*)cost,
@@ -282,21 +268,18 @@ int main(int argc, char **argv) {
 
         }
 
-    fprintf(stderr,"AM: Launching CPU" );
+        fprintf(stderr,"AM: Launching CPU" );
         // Launch CPU threads
         std::thread main_thread(run_cpu_threads, nodes, edges, cost, color, q1, q2, num_t, head, tail, threads_end,
             threads_run, p.n_threads, p.n_gpu_blocks, p.n_gpu_threads, p.switching_limit, GPU_EXEC);
 
-    fprintf(stderr,"AM: Syncing" );
         hipDeviceSynchronize();
         main_thread.join();
 
-    fprintf(stderr,"AM: Iter done" );
         //m5_work_end(0, 0);
 
     } // end of iteration
 
-    fprintf(stderr,"AM: Verifying" );
     // Verify answer
     verify(cost, n_nodes, p.comparison_file);
 

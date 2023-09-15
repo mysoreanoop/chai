@@ -13,6 +13,7 @@ Run from the directory containing gem5 and gem5-resources:
 (PS: `--options="<fill accordingly>"`)
 
 ## Errata
+```
  1. BFS:                         src/gpu-compute/compute\_unit.cc:565: panic: panic condition (numWfs * vregDemandPerWI) > (numVectorALUs * numVecRegsPerSimd) occurred: WG with 1 WFs and 29285 VGPRs per WI can not be allocated to CU that has 8192 VGPRs
 
                                  panic condition (numWfs * sregDemandPerWI) > numScalarRegsPerSimd occurred: WG with 1 WFs and 26656 SGPRs per WI can not be scheduled to CU with 2048 SGPRs
@@ -33,14 +34,15 @@ Run from the directory containing gem5 and gem5-resources:
 
  6. RSCD:                        
 
-    RSCT:                  DEBUG ghost exit (?)
+    RSCT:
 
  7. SC:                          Unrolling fails; cannot allocate memory (possibly due to server memory exhaustion?)
                                  
- 8. SSSP:
+ 8. SSSP:                        Stuck (no GPU progress, unterminated)
 
  9. TQ:     Works
 
     TQH:                         >12 hrs; unterminated
 
-10. TRNS:                        std::bad_alloc -- src/central_freelist.cc:333] tcmalloc: allocation failed 16384 -- server memory issue?
+10. TRNS:                        std::bad_alloc -- src/central_freelist.cc:333] tcmalloc: allocation failed 16384 -- server memory issue. Stuck (no GPU progress, unterminated)
+``

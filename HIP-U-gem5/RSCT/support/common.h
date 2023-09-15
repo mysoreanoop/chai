@@ -61,10 +61,4 @@ typedef struct {
 #define GET_ERR_MACRO(_1,_2,_3,_4,_5,_6,_7,NAME,...) NAME
 #define ALLOC_ERR(...) GET_ERR_MACRO(__VA_ARGS__,ERR_7,ERR_6,ERR_5,ERR_4,ERR_3,ERR_2,ERR_1)(__VA_ARGS__)
 
-#define CUDA_ERR()                                                                                                     \
-    if(cudaStatus != cudaSuccess) {                                                                                    \
-        fprintf(stderr, "CUDA error: %s\n at %s, %d\n", cudaGetErrorString(cudaStatus), __FILE__, __LINE__);           \
-        exit(-1);                                                                                                      \
-    }
-
 #endif

@@ -22,7 +22,7 @@ Run from the directory containing gem5 and gem5-resources:
 
  2. BS:     Works (try CUDA_8)
 
- 3. CEDD:   Works                >24 hrs; no new misses from CPU/GPU; both CPU and GPU threads have been launched; verified!
+ 3. CEDD:   Works
 
     CEDT:                        >24 hrs; failed due to server mem exhaustion?; Retry!
 
@@ -30,7 +30,7 @@ Run from the directory containing gem5 and gem5-resources:
 
     HSTO:                        >12 hrs; unterminated
 
- 5. PAD:    Works (try CUDA_8)   cannot allocate enough memory (unconvinced)A
+ 5. PAD:    Works (try CUDA_8)
 
  6. RSCD:                        
 
@@ -45,4 +45,4 @@ Run from the directory containing gem5 and gem5-resources:
     TQH:                         >12 hrs; unterminated
 
 10. TRNS:                        std::bad_alloc -- src/central_freelist.cc:333] tcmalloc: allocation failed 16384 -- server memory issue. Stuck (no GPU progress, unterminated)
-``
+```

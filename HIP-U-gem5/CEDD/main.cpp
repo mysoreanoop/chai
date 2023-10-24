@@ -67,8 +67,8 @@ struct Params {
 				n_warmup        = 1;
 				n_reps          = 10;
         alpha           = 0.2;
-        file_name       = "input/peppa/";
-        comparison_file = "output/peppa/";
+        file_name       = "gem5-resources/src/gpu/chai/HIP-U-gem5/CEDD/input/peppa/";
+        comparison_file = "gem5-resources/src/gpu/chai/HIP-U-gem5/CEDD/output/peppa/";
         int opt;
         while((opt = getopt(argc, argv, "hd:i:t:w:r:a:f:c")) >= 0) {
             switch(opt) {

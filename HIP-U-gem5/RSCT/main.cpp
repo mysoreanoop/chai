@@ -63,12 +63,12 @@ struct Params {
 
     Params(int argc, char **argv) {
         device                = 0;
-        n_gpu_threads         = 256;
+        n_gpu_threads         = 64;
         n_gpu_blocks          = 64;
         n_threads             = 1;
-				n_warmup              = 0;
-				n_reps                = 1;
-        file_name             = "input/vectors.csv";
+				n_warmup              = 5;
+				n_reps                = 50;
+        file_name             = "gem5-resources/src/gpu/chai/HIP-U-gem5/RSCT/input/vectors.csv";
         max_iter              = 2000;
         error_threshold       = 3;
         convergence_threshold = 0.75;

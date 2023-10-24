@@ -70,7 +70,7 @@ struct Params {
         alpha         = 0.25;
         in_size       = 1536 * 1024;
         n_bins        = 256;
-        file_name     = "input/image_VanHateren.iml";
+        file_name     = "gem5-resources/src/gpu/chai/HIP-U-gem5/HSTO/input/image_VanHateren.iml";
         int opt;
         while((opt = getopt(argc, argv, "hd:i:g:t:w:r:a:n:b:f:")) >= 0) {
             switch(opt) {
@@ -181,7 +181,9 @@ int main(int argc, char **argv) {
     hipDeviceSynchronize();
 
     // Initialize
+    fprintf(stderr, "AM: Reading input\n");
     read_input(h_in, p);
+    fprintf(stderr, "AM: Done\n");
 #ifdef CUDA_8_0
     for(int i = 0; i < p.n_bins; i++) {
         h_histo[i].store(0);
@@ -193,9 +195,11 @@ int main(int argc, char **argv) {
 
 #ifndef CUDA_8_0
     // Copy to device
+    fprintf(stderr, "AM: memcpy\n");
     hipStatus = hipMemcpy(d_in, h_in, p.in_size * sizeof(unsigned int), hipMemcpyHostToDevice);
     hipStatus = hipMemcpy(d_histo, h_histo, p.n_bins * sizeof(unsigned int), hipMemcpyHostToDevice);
     hipDeviceSynchronize();
+    fprintf(stderr, "AM: Done and synced\n");
     if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 #endif
 
@@ -217,6 +221,7 @@ int main(int argc, char **argv) {
 
         // Launch GPU threads
         // Kernel launch
+    fprintf(stderr, "AM: GPU kernel launching\n");
         if(p.n_gpu_blocks > 0) {
             hipStatus = call_Histogram_kernel(p.n_gpu_blocks, p.n_gpu_threads, p.in_size, p.n_bins, n_cpu_bins, 
                 d_in, (unsigned int*)d_histo, p.n_bins * sizeof(unsigned int));
@@ -224,17 +229,21 @@ int main(int argc, char **argv) {
         }
 
         // Launch CPU threads
+    fprintf(stderr, "AM: CPU thread launching\n");
         std::thread main_thread(run_cpu_threads, (unsigned int *)h_histo, h_in, p.in_size, p.n_bins, p.n_threads,
             p.n_gpu_threads, n_cpu_bins);
 
+    fprintf(stderr, "AM: syncing\n");
         hipDeviceSynchronize();
         main_thread.join();
+    fprintf(stderr, "AM: synced\n");
 
         //m5_work_end(0, 0);
     }
 
 #ifndef CUDA_8_0
     // Copy back
+    fprintf(stderr, "AM: Copyback\n");
     hipStatus = hipMemcpy(h_histo_merge, d_histo, p.n_bins * sizeof(unsigned int), hipMemcpyDeviceToHost);
     if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
     hipDeviceSynchronize();
@@ -244,6 +253,7 @@ int main(int argc, char **argv) {
 #endif
 
     // Verify answer
+    fprintf(stderr, "AM: Verifying\n");
 #ifdef CUDA_8_0
     verify((unsigned int *)h_histo, h_in, p.in_size, p.n_bins);
 #else

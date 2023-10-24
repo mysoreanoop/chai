@@ -117,6 +117,7 @@ hipError_t call_TQHistogram_gpu(int blocks, int threads, task_t *queues, int *n_
 
     dim3 dimGrid(blocks);
     dim3 dimBlock(threads);
+    fprintf(stderr, "launching GPU for real now\n");
     hipLaunchKernelGGL(TQHistogram_gpu, dim3(dimGrid), dim3(dimBlock), l_mem_size, 0, queues, n_task_in_queue,
         n_written_tasks, n_consumed_tasks, histo, data, gpuQueueSize,
         frame_size, n_bins);

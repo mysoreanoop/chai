@@ -64,9 +64,9 @@ struct Params {
         n_gpu_threads   = 16;
         n_threads       = 4;
 				n_warmup        = 1;
-				n_reps          = 10;
-        file_name       = "input/peppa/";
-        comparison_file = "output/peppa/";
+				n_reps          = 1;
+        file_name       = "gem5-resources/src/gpu/chai/HIP-U-gem5/CEDT/input/peppa/";
+        comparison_file = "gem5-resources/src/gpu/chai/HIP-U-gem5/CEDT/output/peppa/";
         int opt;
         while((opt = getopt(argc, argv, "hd:i:t:w:r:f:c")) >= 0) {
             switch(opt) {
@@ -146,7 +146,9 @@ int main(int argc, char **argv) {
     // Initialize (part 1)
     unsigned char **all_gray_frames = (unsigned char **)malloc((p.n_warmup + p.n_reps) * sizeof(unsigned char *));
     int     rowsc, colsc, in_size;
+    fprintf(stderr, "AM: Reading input data\n"); 
     read_input(all_gray_frames, rowsc, colsc, in_size, p);
+    fprintf(stderr, "AM: Done reading\n"); 
 
     // Allocate buffers
     const int CPU_PROXY = 0;
@@ -205,6 +207,10 @@ int main(int argc, char **argv) {
                     hipStatus = call_gaussian_kernel(p.n_gpu_threads, h_in_out[rep], d_interm,
                         rowsc, colsc, (p.n_gpu_threads + 2) * (p.n_gpu_threads + 2) * sizeof(int));
                     if(hipStatus != hipSuccess) { fprintf(stderr, "HIP error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
+
+                    fprintf(stderr, "AM: Syncing\n");
+                    hipDeviceSynchronize();
+                    fprintf(stderr, "AM: Done syncing\n");
 
                     // SOBEL KERNEL
                     // Kernel launch

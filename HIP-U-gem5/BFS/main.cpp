@@ -66,13 +66,13 @@ struct Params {
 
     Params(int argc, char **argv) {
         device          = 0;
-        n_gpu_threads   = 256;
-        n_gpu_blocks    = 8;
+        n_gpu_threads   = 64;
+        n_gpu_blocks    = 4;
         n_threads       = 2;
 				n_warmup        = 0;
         n_reps          = 1;
-        file_name       = "input/NYR_input.dat";
-        comparison_file = "output/NYR_bfs_BFS.out";
+        file_name       = "gem5-resources/src/gpu/chai/HIP-U-gem5/BFS/input/NYR_input.dat";
+        comparison_file = "gem5-resources/src/gpu/chai/HIP-U-gem5/BFS/output/NYR_bfs_BFS.out";
         switching_limit = 128;
         int opt;
         while((opt = getopt(argc, argv, "hd:i:g:t:w:r:f:c:l:")) >= 0) {

@@ -70,7 +70,7 @@ struct Params {
         alpha         = 0.2;
         in_size       = 1536 * 1024;
         n_bins        = 256;
-        file_name     = "input/image_VanHateren.iml";
+        file_name     = "gem5-resources/src/gpu/chai/HIP-U-gem5/HSTI/input/image_VanHateren.iml";
         int opt;
         while((opt = getopt(argc, argv, "hd:i:g:t:w:r:a:n:b:f:")) >= 0) {
             switch(opt) {

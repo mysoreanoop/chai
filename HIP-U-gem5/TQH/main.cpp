@@ -70,12 +70,12 @@ struct Params {
     Params(int argc, char **argv) {
         device        = 0;
         n_gpu_threads = 64;
-        n_gpu_blocks  = 320;
+        n_gpu_blocks  = 32;
         n_threads     = 1;
 				n_warmup      = 0;
 				n_reps        = 1;
-        file_name     = "input/basket/basket";
-        pool_size     = 3200;
+        file_name     = "gem5-resources/src/gpu/chai/HIP-U-gem5/TQH/input/basket/basket";
+        pool_size     = 4;
         queue_size    = 320;
         m             = 288;
         n             = 352;
@@ -143,6 +143,7 @@ void read_input(int *data, task_t *task_pool, const Params &p) {
     float v;
     int   frame_size = p.n * p.m;
     for(int i = 0; i < p.pool_size; i++) {
+        fprintf(stderr, "PS:%d\n", i);
         sprintf(dctFileName, "%s%d.float", p.file_name, (i % 2));
         if((File = fopen(dctFileName, "rt")) != NULL) {
             for(int y = 0; y < p.m; ++y) {
@@ -167,7 +168,7 @@ void read_input(int *data, task_t *task_pool, const Params &p) {
 
 // Main ------------------------------------------------------------------------------------------
 int main(int argc, char **argv) {
-
+    fprintf(stderr, "AM: main\n");
 #ifdef ENABLE_PARSEC_HOOKS
   __parsec_bench_begin (__splash2_barnes);
 #endif
@@ -189,7 +190,9 @@ int main(int argc, char **argv) {
     ALLOC_ERR(n_task_in_queue, n_written_tasks, n_consumed_tasks, task_pool_backup);
 
     // Initialize
+    fprintf(stderr, "AM: reading input\n");
     read_input(data_pool, task_pool, p);
+    fprintf(stderr, "AM: done\n");
     for(int i = 0; i < p.pool_size * p.n_bins; i++) {
         histo[i].store(0);
     }
@@ -202,7 +205,9 @@ int main(int argc, char **argv) {
     for(int i = 0; i < NUM_TASK_QUEUES; i++) {
         n_consumed_tasks[i].store(0);
     }
+    fprintf(stderr, "AM: memcpy\n");
 		memcpy(task_pool_backup, task_pool, p.pool_size * sizeof(task_t));
+    fprintf(stderr, "AM: done\n");
 
     for(int y = 0; y < p.n_reps + p.n_warmup; y++) {
 
@@ -226,6 +231,7 @@ int main(int argc, char **argv) {
 
         //m5_work_begin(0, 0);
 
+        fprintf(stderr, "AM: launching CPU\n");
         std::thread main_thread(run_cpu_threads, p.n_threads, task_queues, n_task_in_queue, n_written_tasks,
             n_consumed_tasks, task_pool, data_pool, p.queue_size, &offset, &last_queue, &num_tasks, p.queue_size, p.pool_size,
             p.n_gpu_blocks);
@@ -233,12 +239,15 @@ int main(int argc, char **argv) {
   __parsec_roi_begin();
 #endif
         // Kernel launch
+        fprintf(stderr, "AM: launching GPU\n");
         hipStatus = call_TQHistogram_gpu(p.n_gpu_blocks, p.n_gpu_threads, task_queues, (int*)n_task_in_queue, (int*)n_written_tasks, (int*)n_consumed_tasks,
             (int*)histo, data_pool, p.queue_size, frame_size, p.n_bins, 
             sizeof(int) + sizeof(task_t) + p.n_bins * sizeof(int));
         if(hipStatus != hipSuccess) { fprintf(stderr, "HIP error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 
+        fprintf(stderr, "AM: Syncing GPU\n");
         hipDeviceSynchronize();
+        fprintf(stderr, "AM: Syncing CPU\n");
         main_thread.join();
 #ifdef ENABLE_PARSEC_HOOKS
   __parsec_roi_end();
@@ -247,6 +256,7 @@ int main(int argc, char **argv) {
     }
 
     // Verify answer
+    fprintf(stderr, "AM: verifying\n");
     verify(histo, data_pool, p.pool_size, frame_size, p.n_bins);
 
     // Free memory

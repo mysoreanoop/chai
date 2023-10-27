@@ -18,15 +18,13 @@ Data Paritioning:
 ```
 Both  BS     Works
 Main  CEDD   Works                (with develop) Doesn't terminate
-Main  HSTI   Works                (with develop) gem5.opt: src/mem/ruby/system/GPUCoalescer.cc:635: void gem5::ruby::GPUCoalescer::hitCallback(gem5::ruby::CoalescedRequest*, gem5::ruby::MachineType, gem5::ruby::DataBlock&, bool, gem5::Cycles, gem5::Cycles, gem5::Cycles, bool): Assertion `data.numAtomicLogEntries() == 0' failed.
+Main  HSTI   Works                (with develop) Doesn't terminate
 Dev   HSTO   Works                (with main)    Doesn't terminate
-Main  PAD    Works                (with develop) gem5.opt: src/mem/ruby/system/GPUCoalescer.cc:635: void gem5::ruby::GPUCoalescer::hitCallback(gem5::ruby::CoalescedRequest*, gem5::ruby::MachineType, gem5::ruby::DataBlock&, bool, gem5::Cycles, gem5::Cycles, gem5::Cycles, bool): Assertion `data.numAtomicLogEntries() == 0' failed.
-      SC                          src/mem/xbar.cc:368: fatal: Unable to find destination for [0x20001000:0x20001001] on system.piobus
-                                  Use --debug-flags=PortTrace to see the port trace of the packet.
-                                  (but, with the flag...)
-                                  src/mem/port.cc:209: panic: panic condition !ext occurred: There is no TracingExtension in the packet.
-      RSCD                        (same as SC)
-      TRNS                        (same as SC)
+Both  PAD    Works
+Dev   SC     Works                (with gfx801)
+Dev   RSCD   Verification failed  (same as RSCT)
+      TRNS                        src/mem/port.cc:209: panic: panic condition !ext occurred: There is no TracingExtension in the packet.
+                                  Random matrix size flexibility
 ```
 
 Fine-grained Task Partitioning:
@@ -35,16 +33,14 @@ Both  RSCT   Verification failed
                                   The best fitting model computed by the verification code does not match the model identified by GPU+CPU
                                     will need to contact CHAI folks for algorithm insight (or read the reference paper)
 Both  TQ     Works 
-      TQH    Running in new
-                                  (same as SC)
+Main  TQH    Completes with reduced data, fails verification
+                                  (with develop) (same as SC)
 ```
 
 Coarse-grained Task Partitioning:
 ```
-      BFS                         gem5.opt: src/mem/ruby/system/GPUCoalescer.cc:607: void gem5::ruby::GPUCoalescer::hitCallback(gem5::ruby::CoalescedRequest*, gem5::ruby::MachineType, gem5::ruby::DataBlock&, bool, gem5::Cycles, gem5::Cycles, gem5::Cycles, bool): Assertion `data.numAtomicLogEntries() == 0' failed.
-                                    number of atomic response packets at the coalescer is not consistent with the requests coalesced, so there are some slots of the colescer waiting for responses that never arrive
-                                    might relate to a recent git commit trying to handle it -- perhaps a useful test case.
-      CEDT                        Stuck (GPU not launched)
-      SSSP   Fails, but completes with less data 
-                                  Tried to read unmapped address -- too slow to read data in
+      BFS                         https://github.com/farkhor/PaRMAT -- figure out how to format correctly
+Dev   CEDT   Works                (with gfx902) unimplemented instruction -- v_add_u32_e32
+      SSSP                        Futex syscall -- returns 0 and waits perpetually (Debug how?)
+                                  (same as BFS)
 ```

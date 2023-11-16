@@ -14,7 +14,7 @@ BIN_DIR ?= ./bin
 all: $(BIN_DIR)/$(EXECUTABLE)
 
 $(BIN_DIR)/$(EXECUTABLE): $(CPPSRC) $(BIN_DIR)
-	$(HIPCC) $(OPTS) --amdgpu-target=gfx801,gfx803 $(CXXFLAGS) $(CPPSRC) -o $(BIN_DIR)/$(EXECUTABLE) $(CFLAGS) $(LDFLAGS)
+	$(HIPCC) $(OPTS) --amdgpu-target=gfx801,gfx803,gfx902 $(CXXFLAGS) $(CPPSRC) -o $(BIN_DIR)/$(EXECUTABLE) $(CFLAGS) $(LDFLAGS)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)

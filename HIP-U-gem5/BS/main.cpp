@@ -70,7 +70,7 @@ struct Params {
         n_warmup      = 0;
         n_reps        = 1;
         alpha         = 0.1;
-        file_name     = "input/control.txt";
+        file_name     = "gem5-resources/src/gpu/chai/HIP-U-gem5/BS/input/control.txt";
         in_size_i = in_size_j = 3;
         out_size_i = out_size_j = 300;
         int opt;
@@ -120,7 +120,7 @@ struct Params {
                 "\n"
                 "\nGeneral options:"
                 "\n    -h        help"
-                "\n    -d <D>    CUDA device ID (default=0)"
+                "\n    -d <D>    HIP device ID (default=0)"
                 "\n    -i <I>    # of device threads per block (default=16)"
                 "\n    -g <G>    # of device blocks (default=32)"
                 "\n    -t <T>    # of host threads (default=4)"
@@ -180,6 +180,7 @@ void read_input(XYZ *in, const Params &p) {
 int main(int argc, char **argv) {
 
     const Params p(argc, argv);
+    hipError_t  hipStatus;
 
     // Allocate
     int in_size   = (p.in_size_i + 1) * (p.in_size_j + 1) * sizeof(XYZ);
@@ -199,18 +200,11 @@ int main(int argc, char **argv) {
     XYZ *  h_out       = (XYZ *)malloc(out_size);
     XYZ *  h_out_merge = (XYZ *)malloc(out_size);
     XYZ* d_in;
-    hipError_t  cudaStatus = hipMalloc((void**)&d_in, in_size);
-    if(cudaStatus != hipSuccess) {
-        fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__);
-        exit(-1);
-    }
+    hipStatus = hipMalloc((void**)&d_in, in_size);
     XYZ* d_out;
-    hipError_t  cudaStatus = hipMalloc((void**)&d_out, out_size);
+    hipStatus = hipMalloc((void**)&d_out, out_size);
     ALLOC_ERR(h_in, h_out, h_out_merge);
-    if(cudaStatus != hipSuccess) {
-        fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__);
-        exit(-1);
-    }
+    if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 #endif
     hipDeviceSynchronize();
 
@@ -220,12 +214,9 @@ int main(int argc, char **argv) {
 
 #ifndef CUDA_8_0
     // Copy to device
-    hipError_t  cudaStatus = hipMemcpy(d_in, h_in, in_size, hipMemcpyHostToDevice);
+    hipStatus = hipMemcpy(d_in, h_in, in_size, hipMemcpyHostToDevice);
     hipDeviceSynchronize();
-    if(cudaStatus != hipSuccess) {
-        fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__);
-        exit(-1);
-    }
+    if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 #endif
 
     // Loop over main kernel
@@ -243,17 +234,14 @@ int main(int argc, char **argv) {
         // Launch GPU threads
         // Kernel launch
         if(p.n_gpu_blocks > 0) {
-            hipError_t  cudaStatus = call_Bezier_surface(p.n_gpu_blocks, p.n_gpu_threads, n_tasks, p.alpha,
+            hipStatus = call_Bezier_surface(p.n_gpu_blocks, p.n_gpu_threads, n_tasks, p.alpha,
                 p.in_size_i, p.in_size_j, p.out_size_i, p.out_size_j, 
                 in_size + sizeof(int), d_in, d_out
 #ifdef CUDA_8_0
                 , (int*)worklist
 #endif
                 );
-            if(cudaStatus != hipSuccess) {
-                fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__);
-                exit(-1);
-            }
+            if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
         }
 
         // Launch CPU threads
@@ -272,11 +260,8 @@ int main(int argc, char **argv) {
 
 #ifndef CUDA_8_0
     // Copy back
-    hipError_t  cudaStatus = hipMemcpy(h_out_merge, d_out, out_size, hipMemcpyDeviceToHost);
-    if(cudaStatus != hipSuccess) {
-        fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__);
-        exit(-1);
-    }
+    hipStatus = hipMemcpy(h_out_merge, d_out, out_size, hipMemcpyDeviceToHost);
+    if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
     hipDeviceSynchronize();
     // Merge
     int cut = n_tasks * p.alpha;
@@ -311,13 +296,10 @@ int main(int argc, char **argv) {
     free(h_in);
     free(h_out);
     free(h_out_merge);
-    hipError_t  cudaStatus = hipFree(d_in);
-    hipError_t  cudaStatus = hipFree(d_out);
-    if(cudaStatus != hipSuccess) {
-        fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__);
-        exit(-1);
-    }
+    hipStatus = hipFree(d_in);
+    hipStatus = hipFree(d_out);
 #endif
+    if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 
     printf("Test Passed\n");
     return 0;

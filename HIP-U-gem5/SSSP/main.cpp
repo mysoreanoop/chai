@@ -67,8 +67,8 @@ struct Params {
         n_threads       = 2;
 				n_warmup        = 0;
         n_reps          = 1;
-        file_name       = "input/NYR_input.dat";
-        comparison_file = "output/NYR_bfs.out";
+        file_name       = "gem5-resources/src/gpu/chai/HIP-U-gem5/SSSP/input/NYR_input.dat";
+        comparison_file = "gem5-resources/src/gpu/chai/HIP-U-gem5/SSSP/output/NYR_bfs.out";
         switching_limit = 128;
         int opt;
         while((opt = getopt(argc, argv, "hd:i:g:t:w:r:f:c:l:")) >= 0) {
@@ -103,7 +103,7 @@ struct Params {
                 "\n"
                 "\nGeneral options:"
                 "\n    -h        help"
-                "\n    -d <D>    CUDA device ID (default=0)"
+                "\n    -d <D>    HIP device ID (default=0)"
                 "\n    -i <I>    # of device threads per block (default=256)"
                 "\n    -g <G>    # of device blocks (default=8)"
                 "\n              WARNING: This benchmark uses persistent threads. Setting -g too large may deadlock."
@@ -137,7 +137,7 @@ void read_input(int &source, Node *&h_nodes, Edge *&h_edges, const Params &p) {
 
     fscanf(fp, "%d", &n_nodes);
     fscanf(fp, "%d", &n_edges);
-    fscanf(fp, "%d", &source);
+    source = 0;
     printf("Number of nodes = %d\t", n_nodes);
     printf("Number of edges = %d\t", n_edges);
 
@@ -168,6 +168,7 @@ void read_input(int &source, Node *&h_nodes, Edge *&h_edges, const Params &p) {
 int main(int argc, char **argv) {
 
     const Params p(argc, argv);
+    hipError_t  hipStatus;
 
     // Allocate
     int n_nodes, n_edges;
@@ -191,7 +192,9 @@ int main(int argc, char **argv) {
 
     // Initialize
     int source;
+    fprintf(stderr, "AM: Reading input\n");
     read_input(source, nodes, edges, p);
+    fprintf(stderr, "AM: Done\n");
     for(int i = 0; i < n_nodes; i++) {
         cost[i].store(INF);
     }
@@ -254,26 +257,34 @@ int main(int argc, char **argv) {
         const int GPU_EXEC = (p.n_gpu_blocks > 0 && p.n_gpu_threads > 0) ? 1 : 0;
 
         // Launch CPU threads
+        fprintf(stderr, "AM: Launching CPU threads\n");
         std::thread main_thread(run_cpu_threads, nodes, edges, cost, color, q1, q2, num_t, head, tail, threads_end,
             threads_run, gray_shade, p.n_threads, p.n_gpu_blocks, p.n_gpu_threads, p.switching_limit, GPU_EXEC);
+        fprintf(stderr, "AM: done\n");
 
         // Kernel launch
         if(GPU_EXEC == 1) {
-            hipError_t cudaStatus = call_SSSP_gpu(p.n_gpu_blocks, p.n_gpu_threads, nodes, edges, (int*)cost,
+            fprintf(stderr, "AM: Launching GPU kernel\n");
+            hipStatus = call_SSSP_gpu(p.n_gpu_blocks, p.n_gpu_threads, nodes, edges, (int*)cost,
                 (int*)color, q1, q2, num_t,
                 (int*)head, (int*)tail, (int*)threads_end, (int*)threads_run,
                 overflow, (int*)gray_shade, p.switching_limit, CPU_EXEC, sizeof(int) * (W_QUEUE_SIZE + 3));
-            if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };;
+            if(hipStatus != hipSuccess) { fprintf(stderr, "HIP error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
+            fprintf(stderr, "AM: done\n");
         }
 
+        fprintf(stderr, "AM: Syncing GPU\n");
         hipDeviceSynchronize();
+        fprintf(stderr, "AM: Syncing CPU\n");
         main_thread.join();
+        fprintf(stderr, "AM: done\n");
 
         //m5_work_end(0, 0);
 
     } // end of iteration
 
     // Verify answer
+    fprintf(stderr, "AM: Verifying\n");
     verify(cost, n_nodes, p.comparison_file);
 
     // Free memory

@@ -64,9 +64,9 @@ struct Params {
         n_gpu_threads   = 16;
         n_threads       = 4;
 				n_warmup        = 1;
-				n_reps          = 10;
-        file_name       = "input/peppa/";
-        comparison_file = "output/peppa/";
+				n_reps          = 1;
+        file_name       = "gem5-resources/src/gpu/chai/HIP-U-gem5/CEDT/input/peppa/";
+        comparison_file = "gem5-resources/src/gpu/chai/HIP-U-gem5/CEDT/output/peppa/";
         int opt;
         while((opt = getopt(argc, argv, "hd:i:t:w:r:f:c")) >= 0) {
             switch(opt) {
@@ -97,7 +97,7 @@ struct Params {
                 "\n"
                 "\nGeneral options:"
                 "\n    -h        help"
-                "\n    -d <D>    CUDA device ID (default=0)"
+                "\n    -d <D>    HIP device ID (default=0)"
                 "\n    -i <I>    # of device threads per block (default=16)"
                 "\n    -t <T>    # of host threads (default=4)"
                 "\n    -w <W>    # of untimed warmup iterations (default=10)"
@@ -140,12 +140,15 @@ void read_input(unsigned char** all_gray_frames, int &rowsc, int &colsc, int &in
 int main(int argc, char **argv) {
 
     Params      p(argc, argv);
-    hipError_t  hipError_t cudaStatus;
+    hipError_t hipStatus;
+
 
     // Initialize (part 1)
     unsigned char **all_gray_frames = (unsigned char **)malloc((p.n_warmup + p.n_reps) * sizeof(unsigned char *));
     int     rowsc, colsc, in_size;
+    fprintf(stderr, "AM: Reading input data\n"); 
     read_input(all_gray_frames, rowsc, colsc, in_size, p);
+    fprintf(stderr, "AM: Done reading\n"); 
 
     // Allocate buffers
     const int CPU_PROXY = 0;
@@ -160,7 +163,7 @@ int main(int argc, char **argv) {
     unsigned char * h_interm = (unsigned char *)malloc(in_size);
     ALLOC_ERR(h_interm);
     unsigned char * d_interm;
-    hipError_t cudaStatus = hipMalloc((void**)&d_interm, in_size);
+    hipStatus = hipMalloc((void**)&d_interm, in_size);
     unsigned char **   h_theta;
     h_theta = (unsigned char **)malloc((p.n_warmup + p.n_reps)*sizeof(unsigned char *));
     ALLOC_ERR(h_theta);
@@ -170,7 +173,7 @@ int main(int argc, char **argv) {
     }
     std::atomic<int> sobel_ready[p.n_warmup + p.n_reps];
     hipDeviceSynchronize();
-    if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };;
+    if(hipStatus != hipSuccess) { fprintf(stderr, "HIP error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 
     // Initialize (part 2)
     unsigned char **all_out_frames = (unsigned char **)malloc((p.n_warmup + p.n_reps) * sizeof(unsigned char *));
@@ -200,16 +203,25 @@ int main(int argc, char **argv) {
 
                     // GAUSSIAN KERNEL
                     // Kernel launch
-                    hipError_t cudaStatus = call_gaussian_kernel(p.n_gpu_threads, h_in_out[rep], d_interm,
+                    fprintf(stderr, "AM: Launching GPU kernels\n"); 
+                    hipStatus = call_gaussian_kernel(p.n_gpu_threads, h_in_out[rep], d_interm,
                         rowsc, colsc, (p.n_gpu_threads + 2) * (p.n_gpu_threads + 2) * sizeof(int));
-                    if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };;
+                    if(hipStatus != hipSuccess) { fprintf(stderr, "HIP error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
+
+                    fprintf(stderr, "AM: Syncing\n");
+                    hipDeviceSynchronize();
+                    fprintf(stderr, "AM: Done syncing\n");
 
                     // SOBEL KERNEL
                     // Kernel launch
-                    hipError_t cudaStatus = call_sobel_kernel(p.n_gpu_threads, d_interm, h_in_out[rep], h_theta[rep], 
+                    fprintf(stderr, "AM: Launching GPU kernels\n");
+                    hipStatus = call_sobel_kernel(p.n_gpu_threads, d_interm, h_in_out[rep], h_theta[rep], 
                         rowsc, colsc, (p.n_gpu_threads + 2) * (p.n_gpu_threads + 2) * sizeof(int));
+
+                    fprintf(stderr, "AM: Syncing\n");
                     hipDeviceSynchronize();
-                    if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };;
+                    fprintf(stderr, "AM: Done syncing\n");
+                    if(hipStatus != hipSuccess) { fprintf(stderr, "HIP error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 
                     //m5_work_end(0, 0);
 
@@ -223,32 +235,41 @@ int main(int argc, char **argv) {
                     }
                     if((&sobel_ready[rep])->load() == -1)
                         continue;
-
+                    fprintf(stderr, "AM: Launching CPU threads\n");
                     std::thread main_thread(
                         run_cpu_threads, h_in_out[rep], h_interm, h_theta[rep], rowsc, colsc, p.n_threads, rep);
+
+                    fprintf(stderr, "AM: CPU thread joining\n");
                     main_thread.join();
+                    fprintf(stderr, "AM: CPU thread joined\n");
 
                     memcpy(all_out_frames[rep], h_in_out[rep], in_size);
+                    fprintf(stderr, "AM: memcpying\n");
                 }
             }
         }));
     }
+    fprintf(stderr, "AM: tying threads\n");
     std::for_each(proxy_threads.begin(), proxy_threads.end(), [](std::thread &t) { t.join(); });
+
+    fprintf(stderr, "AM: System level barrier\n");
     hipDeviceSynchronize();
+    fprintf(stderr, "AM: System level barrier crossed!\n");
 
     // Verify answer
     verify(all_out_frames, in_size, p.comparison_file, p.n_warmup + p.n_reps, rowsc, colsc, rowsc, colsc);
+    fprintf(stderr, "AM: Verified\n");
 
     // Release buffers
     for(int i = 0; i < p.n_warmup + p.n_reps; i++) {
-        hipError_t cudaStatus = hipFree(h_in_out[i]);
+        hipStatus = hipFree(h_in_out[i]);
     }
-    hipError_t cudaStatus = hipFree(h_in_out);
+    hipStatus = hipFree(h_in_out);
     free(h_interm);
     for(int i = 0; i < p.n_warmup + p.n_reps; i++) {
-        hipError_t cudaStatus = hipFree(h_theta[i]);
+        hipStatus = hipFree(h_theta[i]);
     }
-    hipError_t cudaStatus = hipFree(h_theta);
+    hipStatus = hipFree(h_theta);
     for(int i = 0; i < p.n_warmup + p.n_reps; i++) {
         free(all_gray_frames[i]);
     }
@@ -257,8 +278,8 @@ int main(int argc, char **argv) {
         free(all_out_frames[i]);
     }
     free(all_out_frames);
-    hipError_t cudaStatus = hipFree(d_interm);
-    if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };;
+    hipStatus = hipFree(d_interm);
+    if(hipStatus != hipSuccess) { fprintf(stderr, "HIP error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 
     printf("Test Passed\n");
     return 0;

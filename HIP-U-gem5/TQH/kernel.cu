@@ -38,7 +38,7 @@
 
 #include "support/common.h"
 
-// CUDA kernel ------------------------------------------------------------------------------------------
+// HIP kernel ------------------------------------------------------------------------------------------
 __global__ void TQHistogram_gpu(task_t *queues, int *n_task_in_queue,
     int *n_written_tasks, int *n_consumed_tasks,
     int *histo, int *data, int gpuQueueSize, int frame_size, int n_bins) {
@@ -117,6 +117,7 @@ hipError_t call_TQHistogram_gpu(int blocks, int threads, task_t *queues, int *n_
 
     dim3 dimGrid(blocks);
     dim3 dimBlock(threads);
+    fprintf(stderr, "launching GPU for real now\n");
     hipLaunchKernelGGL(TQHistogram_gpu, dim3(dimGrid), dim3(dimBlock), l_mem_size, 0, queues, n_task_in_queue,
         n_written_tasks, n_consumed_tasks, histo, data, gpuQueueSize,
         frame_size, n_bins);

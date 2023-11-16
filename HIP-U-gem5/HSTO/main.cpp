@@ -58,6 +58,7 @@ struct Params {
     float alpha;
     int   in_size;
     int   n_bins;
+    const char *file_name;
 
     Params(int argc, char **argv) {
         device        = 0;
@@ -69,8 +70,9 @@ struct Params {
         alpha         = 0.25;
         in_size       = 1536 * 1024;
         n_bins        = 256;
+        file_name     = "gem5-resources/src/gpu/chai/HIP-U-gem5/HSTO/input/image_VanHateren.iml";
         int opt;
-        while((opt = getopt(argc, argv, "hd:i:g:t:w:r:a:n:b:")) >= 0) {
+        while((opt = getopt(argc, argv, "hd:i:g:t:w:r:a:n:b:f:")) >= 0) {
             switch(opt) {
             case 'h':
                 usage();
@@ -85,6 +87,7 @@ struct Params {
             case 'a': alpha         = atof(optarg); break;
             case 'n': in_size       = atoi(optarg); break;
             case 'b': n_bins        = atoi(optarg); break;
+            case 'f': file_name     = optarg; break;
             default:
                 fprintf(stderr, "\nUnrecognized option!\n");
                 usage();
@@ -111,12 +114,13 @@ struct Params {
                 "\n"
                 "\nGeneral options:"
                 "\n    -h        help"
-                "\n    -d <D>    CUDA device ID (default=0)"
+                "\n    -d <D>    HIP device ID (default=0)"
                 "\n    -i <I>    # of device threads per block (default=256)"
                 "\n    -g <G>    # of device blocks (default=16)"
                 "\n    -t <T>    # of host threads (default=4)"
                 "\n    -w <W>    # of untimed warmup iterations (default=5)"
                 "\n    -r <R>    # of timed repetition iterations (default=50)"
+                "\n    -f <F>    # input file name"
                 "\n"
                 "\nData-partitioning-specific options:"
                 "\n    -a <A>    fraction of output bins to process on host (default=0.25)"
@@ -132,13 +136,11 @@ struct Params {
 // Input Data -----------------------------------------------------------------
 void read_input(unsigned int *input, const Params &p) {
 
-    char  dctFileName[100];
     FILE *File = NULL;
 
     // Open input file
     unsigned short temp;
-    sprintf(dctFileName, "./input/image_VanHateren.iml");
-    if((File = fopen(dctFileName, "rb")) != NULL) {
+    if((File = fopen(p.file_name, "rb")) != NULL) {
         for(int y = 0; y < p.in_size; y++) {
             int fr   = fread(&temp, sizeof(unsigned short), 1, File);
             input[y] = (unsigned int)ByteSwap16(temp);
@@ -147,7 +149,7 @@ void read_input(unsigned int *input, const Params &p) {
         }
         fclose(File);
     } else {
-        printf("%s does not exist\n", dctFileName);
+        printf("%s does not exist\n", p.file_name);
         exit(1);
     }
 }
@@ -156,7 +158,7 @@ void read_input(unsigned int *input, const Params &p) {
 int main(int argc, char **argv) {
 
     const Params p(argc, argv);
-    cudaError_t  cudaStatus;
+    hipError_t  hipStatus;
 
     // Allocate buffers
 #ifdef CUDA_8_0
@@ -171,15 +173,17 @@ int main(int argc, char **argv) {
     unsigned int *    h_histo_merge = (unsigned int *)malloc(p.n_bins * sizeof(unsigned int));
     ALLOC_ERR(h_in, h_histo, h_histo_merge);
     unsigned int *    d_in;
-    cudaStatus = cudaMalloc((void**)&d_in, p.in_size * sizeof(unsigned int));
+    hipStatus = hipMalloc((void**)&d_in, p.in_size * sizeof(unsigned int));
     unsigned int *    d_histo;
-    cudaStatus = cudaMalloc((void**)&d_histo, p.n_bins * sizeof(unsigned int));
-    if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };
+    hipStatus = hipMalloc((void**)&d_histo, p.n_bins * sizeof(unsigned int));
+    if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 #endif
-    cudaThreadSynchronize();
+    hipDeviceSynchronize();
 
     // Initialize
+    fprintf(stderr, "AM: Reading input\n");
     read_input(h_in, p);
+    fprintf(stderr, "AM: Done\n");
 #ifdef CUDA_8_0
     for(int i = 0; i < p.n_bins; i++) {
         h_histo[i].store(0);
@@ -191,10 +195,12 @@ int main(int argc, char **argv) {
 
 #ifndef CUDA_8_0
     // Copy to device
-    cudaStatus = cudaMemcpy(d_in, h_in, p.in_size * sizeof(unsigned int), cudaMemcpyHostToDevice);
-    cudaStatus = cudaMemcpy(d_histo, h_histo, p.n_bins * sizeof(unsigned int), cudaMemcpyHostToDevice);
-    cudaThreadSynchronize();
-    if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };
+    fprintf(stderr, "AM: memcpy\n");
+    hipStatus = hipMemcpy(d_in, h_in, p.in_size * sizeof(unsigned int), hipMemcpyHostToDevice);
+    hipStatus = hipMemcpy(d_histo, h_histo, p.n_bins * sizeof(unsigned int), hipMemcpyHostToDevice);
+    hipDeviceSynchronize();
+    fprintf(stderr, "AM: Done and synced\n");
+    if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 #endif
 
     for(int rep = 0; rep < p.n_warmup + p.n_reps; rep++) {
@@ -206,42 +212,48 @@ int main(int argc, char **argv) {
         }
 #else
         memset(h_histo, 0, p.n_bins * sizeof(unsigned int));
-        cudaStatus = cudaMemcpy(d_histo, h_histo, p.n_bins * sizeof(unsigned int), cudaMemcpyHostToDevice);
-        cudaThreadSynchronize();
-        if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };
+        hipStatus = hipMemcpy(d_histo, h_histo, p.n_bins * sizeof(unsigned int), hipMemcpyHostToDevice);
+        hipDeviceSynchronize();
+        if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 #endif
 
         //m5_work_begin(0, 0);
 
         // Launch GPU threads
         // Kernel launch
+    fprintf(stderr, "AM: GPU kernel launching\n");
         if(p.n_gpu_blocks > 0) {
-            cudaStatus = call_Histogram_kernel(p.n_gpu_blocks, p.n_gpu_threads, p.in_size, p.n_bins, n_cpu_bins, 
+            hipStatus = call_Histogram_kernel(p.n_gpu_blocks, p.n_gpu_threads, p.in_size, p.n_bins, n_cpu_bins, 
                 d_in, (unsigned int*)d_histo, p.n_bins * sizeof(unsigned int));
-                if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };
+            if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
         }
 
         // Launch CPU threads
+    fprintf(stderr, "AM: CPU thread launching\n");
         std::thread main_thread(run_cpu_threads, (unsigned int *)h_histo, h_in, p.in_size, p.n_bins, p.n_threads,
             p.n_gpu_threads, n_cpu_bins);
 
-        cudaThreadSynchronize();
+    fprintf(stderr, "AM: syncing\n");
+        hipDeviceSynchronize();
         main_thread.join();
+    fprintf(stderr, "AM: synced\n");
 
         //m5_work_end(0, 0);
     }
 
 #ifndef CUDA_8_0
     // Copy back
-    cudaStatus = cudaMemcpy(h_histo_merge, d_histo, p.n_bins * sizeof(unsigned int), cudaMemcpyDeviceToHost);
-    if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };
-    cudaThreadSynchronize();
+    fprintf(stderr, "AM: Copyback\n");
+    hipStatus = hipMemcpy(h_histo_merge, d_histo, p.n_bins * sizeof(unsigned int), hipMemcpyDeviceToHost);
+    if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
+    hipDeviceSynchronize();
     for(unsigned int i = 0; i < p.n_bins; ++i) {
         h_histo_merge[i] += (unsigned int)h_histo[i];
     }
 #endif
 
     // Verify answer
+    fprintf(stderr, "AM: Verifying\n");
 #ifdef CUDA_8_0
     verify((unsigned int *)h_histo, h_in, p.in_size, p.n_bins);
 #else
@@ -256,11 +268,11 @@ int main(int argc, char **argv) {
     free(h_in);
     free(h_histo);
     free(h_histo_merge);
-    cudaStatus = cudaFree(d_in);
-    cudaStatus = cudaFree(d_histo);
+    hipStatus = hipFree(d_in);
+    hipStatus = hipFree(d_histo);
 #endif
-    if(cudaStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(cudaStatus), __FILE__, __LINE__); exit(-1); };
-    cudaThreadSynchronize();
+    if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
+    hipDeviceSynchronize();
 
     printf("Test Passed\n");
     return 0;

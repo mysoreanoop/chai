@@ -63,12 +63,12 @@ struct Params {
 
     Params(int argc, char **argv) {
         device                = 0;
-        n_gpu_threads         = 256;
+        n_gpu_threads         = 64;
         n_gpu_blocks          = 64;
         n_threads             = 1;
-				n_warmup              = 0;
-				n_reps                = 1;
-        file_name             = "input/vectors.csv";
+				n_warmup              = 5;
+				n_reps                = 50;
+        file_name             = "gem5-resources/src/gpu/chai/HIP-U-gem5/RSCT/input/vectors.csv";
         max_iter              = 2000;
         error_threshold       = 3;
         convergence_threshold = 0.75;
@@ -106,7 +106,7 @@ struct Params {
                 "\n"
                 "\nGeneral options:"
                 "\n    -h        help"
-                "\n    -d <D>    CUDA device ID (default=0)"
+                "\n    -d <D>    HIP device ID (default=0)"
                 "\n    -i <I>    # of device threads per block (default=256)"
                 "\n    -g <G>    # of device blocks (default=64)"
                 "\n    -t <T>    # of host threads (default=1)"
@@ -176,7 +176,7 @@ void read_input(flowvector *v, int *r, const Params &p) {
 int main(int argc, char **argv) {
 
     const Params p(argc, argv);
-    cudaError_t  cudaStatus;
+    hipError_t  hipStatus;
 
     // Allocate
     int         n_flow_vectors = read_input_size(p);
@@ -190,11 +190,11 @@ int main(int argc, char **argv) {
     std::atomic_int *g_out_id = (std::atomic_int *)malloc(sizeof(std::atomic_int));
     std::atomic_int *launch_gpu = (std::atomic_int *)malloc((p.max_iter + p.n_gpu_blocks) * sizeof(std::atomic_int));
     ALLOC_ERR(flow_vector_array, random_numbers, model_candidate, outliers_candidate, model_param_local, g_out_id, launch_gpu);
-    cudaThreadSynchronize();
+    hipDeviceSynchronize();
 
     // Initialize
     read_input(flow_vector_array, random_numbers, p);
-    cudaThreadSynchronize();
+    hipDeviceSynchronize();
 
     for(int rep = 0; rep < p.n_warmup + p.n_reps; rep++) {
 
@@ -206,22 +206,22 @@ int main(int argc, char **argv) {
         for(int i = 0; i < p.max_iter + p.n_gpu_blocks; i++) {
             launch_gpu[i].store(0);
         }
-        cudaThreadSynchronize();
+        hipDeviceSynchronize();
 
         //m5_work_begin(0, 0);
 
         // Launch GPU threads
         // Kernel launch
-        cudaStatus = call_RANSAC_kernel_block(p.n_gpu_blocks, p.n_gpu_threads, model_param_local, flow_vector_array, 
+        hipStatus = call_RANSAC_kernel_block(p.n_gpu_blocks, p.n_gpu_threads, model_param_local, flow_vector_array, 
             n_flow_vectors, random_numbers, p.max_iter, p.error_threshold, p.convergence_threshold, 
             (int*)g_out_id, model_candidate, outliers_candidate, (int*)launch_gpu, sizeof(int));
-        CUDA_ERR();
+        if(hipStatus != hipSuccess) { fprintf(stderr, "CUDA error: %s\n at %s, %d\n", hipGetErrorString(hipStatus), __FILE__, __LINE__); exit(-1); };;
 
         // Launch CPU threads
         std::thread main_thread(run_cpu_threads, model_param_local, flow_vector_array, n_flow_vectors, random_numbers,
             p.max_iter, p.error_threshold, p.convergence_threshold, g_out_id, p.n_threads, launch_gpu);
 
-        cudaThreadSynchronize();
+        hipDeviceSynchronize();
 
         main_thread.join();
 
